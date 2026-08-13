@@ -1,1 +1,1 @@
-{"name":"uno-friends-table","version":"1.0.0","private":true,"type":"module","scripts":{"start":"node server.js"},"engines":{"node":">=20"},"dependencies":{"express":"^5.1.0","ws":"^8.18.3"}}
+{"name":"uno-friends-table","version":"1.0.0","private":true,"type":"module","scripts":{"start":"node server2.js"},"engines":{"node":">=20 <26"},"dependencies":{"express":"^5.1.0","ws":"^8.18.3"}}
