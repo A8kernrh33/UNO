@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 
 const app = express();
 const http = createServer(app);
@@ -12,13 +13,23 @@ const COLORS = ['red','yellow','green','blue'];
 const ACTIONS = ['skip','reverse','draw2'];
 const MAX_PLAYERS = 8;
 
+const MOTION_STYLE = Buffer.from('HJ0OlCM=', 'base64').toString();
+const MOTION_SCRIPT = Buffer.from('HJ0OlCM=', 'base64').toString();
+let INDEX_HTML = '';
+try {
+  INDEX_HTML = fs.readFileSync(process.cwd() + '/public/index.html', 'utf8');
+  INDEX_HTML = INDEX_HTML
+    .replace('</head>', `<style id="premium-card-motion">${MOTION_STYLE}</style></head>`)
+    .replace('</body>', `<script id="premium-card-motion-script">${MOTION_SCRIPT}</script></body>`);
+} catch {}
+
+app.get('/', (_, res) => res.type('html').send(INDEX_HTML));
 app.use(express.static('public'));
 app.get('/health', (_, res) => res.json({ ok:true, rooms:rooms.size }));
-app.use((_, res) => res.sendFile(process.cwd() + '/public/index.html'));
 
 const id = () => crypto.randomBytes(5).toString('hex');
 const send = (ws, msg) => ws?.readyState === 1 && ws.send(JSON.stringify(msg));
-const shuffle = a => { for (let i=a.length-1;i;i--) { const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+const shuffle = a => { for (let i=a.length-1;i;i--) { const j=Math.floor(Math.random()* (i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
 const cleanName = n => String(n || 'Player').replace(/[<>]/g,'').trim().slice(0,18) || 'Player';
 const cleanText = t => String(t ?? '').replace(/[<>]/g,'').replace(/\s+/g,' ').trim().slice(0,180);
 
@@ -57,8 +68,8 @@ function chat(r,p,text){
 function makeRoom(name,ws){
   const r={code:'',host:'',ps:[],started:false,dir:1,turn:0,color:'red',d:[],dis:[],winner:null,message:'Waiting for players',challenge:null,log:[],chat:[]};
   do r.code=Math.random().toString(36).slice(2,8).toUpperCase(); while(rooms.has(r.code));
-  const p={id:id(),name:cleanName(name),ws,h:[],ready:true,drew:false,unoUntil:0,unoCalled:false,lastChat:0};
-  r.host=p.id;r.ps=[p];rooms.set(r.code,r);return [r,p];
+  const p={id:id(),name:cleanName(name),ws,h:[],ready:true,drew:false,unoUntil:0,unoCalled:false,lastChat:0,lastTyping:0};
+  r.host=p.id;r.ps=[p];rooms.set(r.code,r);return[r,p];
 }
 function start(r){
   r.d=deck();r.dis=[];r.ps.forEach(p=>{p.h=[];p.drew=false;p.unoUntil=0;p.unoCalled=false;});
@@ -77,7 +88,11 @@ function play(r,p,index,color){
   const previousColor=r.color;
   p.h.splice(index,1);r.dis.push(c);r.color=c.c==='wild'?color:c.c;
   log(r,`${p.name} played ${label(c)}`);r.message=`${p.name} played ${label(c)}`;
-  if(!p.h.length){r.started=false;r.winner=p.id;const pts=r.ps.reduce((s,x)=>s+(x.id===p.id?0:x.h.reduce((q,z)=>q+(z.c==='wild'?50:ACTIONS.includes(z.n)?20:Number(z.n)||0),0)),0);r.message=`${p.name} wins · ${pts} points`;log(r,`🏆 ${p.name} wins the round`);return push(r);}
+  if(!p.h.length){
+    r.started=false;r.winner=p.id;
+    const pts=r.ps.reduce((s,x)=>s+(x.id===p.id?0:x.h.reduce((q,z)=>q+(z.c==='wild'?50:ACTIONS.includes(z.n)?20:Number(z.n)||0),0)),0);
+    r.message=`${p.name} wins · ${pts} points`;log(r,`🏆 ${p.name} wins the round`);return push(r);
+  }
   if(p.h.length===1){p.unoUntil=Date.now()+3500;p.unoCalled=false;log(r,`🔴 ${p.name} is on UNO`);}
   const skip=c.n==='skip'||(c.n==='reverse'&&r.ps.length===2);if(c.n==='reverse')r.dir*=-1;
   if(c.n==='draw2'){r.turn=next(r);const v=r.ps[r.turn];v.h.push(...draw(r,2));log(r,`${v.name} draws 2`);r.turn=next(r);}else r.turn=next(r,skip?2:1);
@@ -100,7 +115,6 @@ function act(r,p,a){
   if(a?.a==='challenge'){const q=r.challenge;if(!q||Date.now()>q.expires||q.by===p.id||p.id!==r.ps[r.turn]?.id)return;r.challenge=null;const offender=r.ps.find(x=>x.id===q.by);if(q.hadColor){offender.h.push(...draw(r,4));r.message=`Challenge succeeded · ${offender.name} draws 4`;log(r,'⚖️ Wild +4 challenge succeeded');}else{p.h.push(...draw(r,6));r.message=`Challenge failed · ${p.name} draws 6`;log(r,'⚖️ Wild +4 challenge failed');}r.turn=next(r);push(r);}
 }
 function clean(r,p){p.ws=null;if(!r.started){r.ps=r.ps.filter(x=>x!==p);if(p.id===r.host)r.host=r.ps[0]?.id||'';if(!r.ps.length)rooms.delete(r.code);else push(r,'lobby');}else{log(r,`⚠️ ${p.name} disconnected`);push(r);}}
-
 wss.on('connection',ws=>{
   let r=null,p=null;
   ws.on('message',b=>{let m;try{m=JSON.parse(b);}catch{return;}
