@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UNO — Friends Table</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05080a}iframe{width:100%;height:100%;border:0;display:block}</style></head><body><iframe id="table" src="game.html" allow="clipboard-write"></iframe><script>
+const frame=document.getElementById('table');
+frame.addEventListener('load',()=>{const w=frame.contentWindow;let patched=false,guestReadySent=false;
+function patch(){try{
+ if(!patched && typeof w.hostStart==='function'){
+  const original=w.hostStart.bind(w);
+  w.hostStart=function(){ if(w.players&&w.players.length>=2){w.players.forEach(p=>p.ready=true);original();} };
+  patched=true;
+ }
+ if(w.host && w.players && w.players.length>=2 && w.document.getElementById('startBtn')){w.document.getElementById('startBtn').disabled=false;w.document.getElementById('startBtn').classList.remove('hidden');w.document.getElementById('startBtn').textContent='Start game';}
+ if(!w.host && w.myId && w.conns && w.conns[0] && w.conns[0].open && !guestReadySent){w.conns[0].send({t:'ready',id:w.myId,value:true});guestReadySent=true;}
+ }catch(e){}
+ setTimeout(patch,700);
+}patch();
+});
+</script></body></html>
