@@ -4,10 +4,12 @@ services:
     runtime: node
     plan: free
     branch: main
-    buildCommand: npm ci
+    buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health
     autoDeployTrigger: commit
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: "24.14.1"
